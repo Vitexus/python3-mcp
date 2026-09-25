@@ -1,6 +1,21 @@
 [project]
 name = "mcp"
-dynamic = ["version", "dependencies"]
+dependencies = [
+    "anyio>=4.10",
+    "httpx2>=2.5.0",
+    "mcp-types==2.0.0",
+    "pydantic>=2.12.0",
+    "starlette>=0.48.0",
+    "python-multipart>=0.0.9",
+    "sse-starlette>=3.0.0",
+    "uvicorn>=0.31.1",
+    "jsonschema>=4.20.0",
+    "pyjwt[crypto]>=2.10.1",
+    "typing-extensions>=4.13.0",
+    "typing-inspection>=0.4.1",
+    "opentelemetry-api>=1.28.0",
+]
+version = "2.0.0"
 description = "Model Context Protocol SDK"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -113,39 +128,8 @@ translate = ["anthropic>=0.121.0"]
 codegen = ["datamodel-code-generator==0.57.0"]
 
 [build-system]
-requires = ["hatchling", "uv-dynamic-versioning"]
+requires = ["hatchling"]
 build-backend = "hatchling.build"
-
-[tool.hatch.version]
-source = "uv-dynamic-versioning"
-
-[tool.uv-dynamic-versioning]
-vcs = "git"
-style = "pep440"
-bump = true
-
-[tool.hatch.metadata.hooks.uv-dynamic-versioning]
-dependencies = [
-    # anyio < 4.10 triggers a compile-time SyntaxWarning on Python 3.14 (PEP 765,
-    # "'return' in a 'finally' block"); for stdio servers it lands on the child's
-    # stderr (agronholm/anyio#816, fixed in 4.10).
-    "anyio>=4.10; python_version >= '3.14'",
-    "anyio>=4.9; python_version < '3.14'",
-    "httpx2>=2.5.0",
-    "mcp-types=={{ version }}",
-    "pydantic>=2.12.0",
-    "starlette>=0.48.0; python_version >= '3.14'",
-    "starlette>=0.27; python_version < '3.14'",
-    "python-multipart>=0.0.9",
-    "sse-starlette>=3.0.0",
-    "uvicorn>=0.31.1; sys_platform != 'emscripten'",
-    "jsonschema>=4.20.0",
-    "pywin32>=311; sys_platform == 'win32'",
-    "pyjwt[crypto]>=2.10.1",
-    "typing-extensions>=4.13.0",
-    "typing-inspection>=0.4.1",
-    "opentelemetry-api>=1.28.0",
-]
 
 [project.urls]
 Homepage = "https://modelcontextprotocol.io"

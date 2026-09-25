@@ -1,6 +1,6 @@
 [project]
 name = "mcp-types"
-dynamic = ["version"]
+version = "2.0.0"
 description = "Model Context Protocol wire types"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -36,16 +36,8 @@ Repository = "https://github.com/modelcontextprotocol/python-sdk"
 Issues = "https://github.com/modelcontextprotocol/python-sdk/issues"
 
 [build-system]
-requires = ["hatchling", "uv-dynamic-versioning"]
+requires = ["hatchling"]
 build-backend = "hatchling.build"
-
-[tool.hatch.version]
-source = "uv-dynamic-versioning"
-
-[tool.uv-dynamic-versioning]
-vcs = "git"
-style = "pep440"
-bump = true
 
 [tool.hatch.build.targets.sdist.force-include]
 "../../LICENSE" = "LICENSE"

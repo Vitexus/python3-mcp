@@ -183,3 +183,18 @@ results/
 
 # conformance CI local runs
 conformance-results/
+
+# Debian package
+.pybuild/
+debian/.debhelper/
+debian/debhelper-build-stamp
+debian/files
+debian/python3-mcp-types.postinst.debhelper
+debian/python3-mcp-types.prerm.debhelper
+debian/python3-mcp-types.substvars
+debian/python3-mcp-types/
+debian/python3-mcp.postinst.debhelper
+debian/python3-mcp.prerm.debhelper
+debian/python3-mcp.substvars
+debian/python3-mcp/
+
