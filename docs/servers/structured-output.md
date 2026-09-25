@@ -169,6 +169,8 @@ result.structured_content  # {"London": 16.2, "Reykjavik": 4.4}
 
 The keys must be `str`. A `dict[int, float]` can't be a JSON object, so it falls back to the `{"result": ...}` wrapper.
 
+Dictionary results use Pydantic's `TypeAdapter` for validation and serialization. If you inspect a tool's `FuncMetadata.output_model`, it holds the dictionary type annotation with its schema title.
+
 ## Validation
 
 `output_schema` is not documentation. Whatever your function returns is **validated against it** before it leaves the server.
@@ -182,17 +184,18 @@ You don't notice while you build the value by hand: Pydantic already made sure y
 The annotation promises `WeatherData`. The upstream response stopped sending `humidity`.
 
 !!! check
-    Call `get_weather` and it does not quietly hand the client a half-empty object. The call fails,
-    and the first lines of the error name the field:
+    Call `get_weather` and it does not quietly hand the client a half-empty object. The call fails:
+    the client gets `is_error=True` with `Error executing tool get_weather`, so the model knows the
+    call failed instead of confidently reading weather that isn't there. The field name is for you,
+    in the server log at `ERROR`:
 
     ```text
-    Error executing tool get_weather: 1 validation error for WeatherData
+    Tool 'get_weather' raised an unexpected exception
+    ...
+    pydantic_core._pydantic_core.ValidationError: 1 validation error for WeatherData
     humidity
       Field required [type=missing, input_value={'temperature': 16.2, 'conditions': 'Overcast'}, input_type=dict]
     ```
-
-    That text comes back as the tool result with `is_error=True`, so the model knows the call failed
-    instead of confidently reading weather that isn't there.
 
 Returning a plain `dict` from a `-> WeatherData` tool is fine, by the way. That's exactly what `json.loads` produced. Validation is on the value, not on the Python type.
 

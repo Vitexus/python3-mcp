@@ -1,6 +1,6 @@
 ---
 translation:
-  sections: [cfe01c0c5863dfa2, 11d93f1fa09eadf5, a7392996acf1ad8f, 875eb2889263424e]
+  sections: [cfe01c0c5863dfa2, 0dbb68d8b210177b, 80cf193023af3ed4, 875eb2889263424e]
   tool: 1
 ---
 # Novedades de la v2 {#whats-new-in-v2}
@@ -43,13 +43,13 @@ No todo lo que una herramienta necesita debería venir del modelo. Novedad de la
 
 La v1 te entregaba tres capas anidadas: un gestor de contexto de transporte que producía flujos en crudo, una `ClientSession` envolviéndolos y un `await session.initialize()` llamado a mano. La v2 tiene un solo objeto:
 
-```python title="client.py" hl_lines="14-18"
---8<-- "docs_src/client/tutorial001.py"
+```python title="client.py" hl_lines="7-11"
+--8<-- "docs_src/client/tutorial001_client.py"
 ```
 
-`Client` acepta un objeto servidor (en memoria, sin transporte: la historia de las pruebas), una URL (Streamable HTTP) o cualquier gestor de contexto de transporte como `stdio_client(...)`. Entrar en `async with` conecta y negocia la versión del protocolo, sea cual sea la generación que hable el servidor; `client.server_capabilities` y `client.protocol_version` simplemente están ahí después, y `client.server_info` también cuando el servidor se identifica (ahora es `Implementation | None`, porque la identidad en la generación 2026 es opcional). Los callbacks de muestreo y elicitación que registraste en la v1 siguen funcionando (sus cuerpos ven el mismo renombramiento de atributos a snake_case que todo lo demás en esta página), ahora también responden a las solicitudes dentro de resultados al estilo 2026 (más abajo) y se ejecutan concurrentemente en lugar de una a una. `ClientSession` sigue debajo para quien quiera la superficie de bajo nivel, y `client.session` te la entrega; también cambió (corre sobre el nuevo motor de despacho, y algunas de sus propias firmas cambiaron), así que lee la **[Guía de migración](migration.md#clientsession-now-runs-on-jsonrpcdispatcher-basesession-removed)** antes de bajar a ese nivel.
+`Client` acepta una URL (Streamable HTTP), un `StdioServerParameters` (un subproceso stdio), cualquier otro gestor de contexto de transporte como `sse_client(...)` o, en las pruebas, el propio objeto servidor (en memoria, sin transporte). Entrar en `async with` conecta y negocia la versión del protocolo, sea cual sea la generación que hable el servidor; `client.server_capabilities` y `client.protocol_version` simplemente están ahí después, y `client.server_info` también cuando el servidor se identifica (ahora es `Implementation | None`, porque la identidad en la generación 2026 es opcional). Los callbacks de muestreo y elicitación que registraste en la v1 siguen funcionando (sus cuerpos ven el mismo renombramiento de atributos a snake_case que todo lo demás en esta página), ahora también responden a las solicitudes dentro de resultados al estilo 2026 (más abajo) y se ejecutan concurrentemente en lugar de una a una. `ClientSession` sigue debajo para quien quiera la superficie de bajo nivel, y `client.session` te la entrega; también cambió (se ejecuta sobre el nuevo motor de despacho, y algunas de sus propias firmas cambiaron), así que lee la **[Guía de migración](migration.md#clientsession-now-runs-on-jsonrpcdispatcher-basesession-removed)** antes de bajar a ese nivel.
 
-**[El Client](client/index.md)** lo presenta, **[Transportes del cliente](client/transports.md)** cubre las tres formas de conexión, **[Callbacks del cliente](client/callbacks.md)** cubre los callbacks en sí y **[Pruebas](get-started/testing.md)** muestra el patrón en memoria que sustituye al helper `create_connected_server_and_client_session()` de la v1.
+**[El Client](client/index.md)** lo presenta, **[Transportes del cliente](client/transports.md)** cubre las cuatro formas de conexión, **[Callbacks del cliente](client/callbacks.md)** cubre los callbacks en sí y **[Pruebas](get-started/testing.md)** muestra el patrón en memoria que sustituye al helper `create_connected_server_and_client_session()` de la v1.
 
 ### El `Server` de bajo nivel se reconstruyó, no se renombró {#the-low-level-server-was-rebuilt-not-renamed}
 
@@ -135,7 +135,7 @@ En esos tipos, cada atributo de Python es ahora snake_case: `result.is_error`, `
 Los renombramientos se anuncian solos. Estos no:
 
 * **Las funciones síncronas se ejecutan en un hilo de trabajo.** Una herramienta `def` (o recurso, prompt o resolutor) ya no bloquea el bucle de eventos; la contrapartida es que su cuerpo ya no se ejecuta *en* el hilo del bucle de eventos, lo que importa para código afín a un hilo. Los handlers `async def` no cambian. **[Guía de migración](migration.md#sync-handler-functions-now-run-on-a-worker-thread)**.
-* **`MCPError` (el `McpError` de la v1) lanzado dentro de una herramienta es ahora un error de protocolo.** El modelo nunca lo ve. Cualquier otra excepción sigue convirtiéndose en un resultado `is_error=True` que el modelo puede leer y al que puede reaccionar. **[Manejo de errores](servers/handling-errors.md)** explica la división.
+* **`MCPError` (el `McpError` de la v1) lanzado dentro de una herramienta es ahora un error de protocolo.** El modelo nunca lo ve. Cualquier otra excepción sigue convirtiéndose en un resultado `is_error=True`, pero solo el mensaje de un `ToolError` llega al modelo: cualquier otra excepción se lee ahora como `Error executing tool <name>`, con el traceback en el log de tu servidor. **[Manejo de errores](servers/handling-errors.md)** explica la división.
 * **Los resultados se validan antes de salir.** Un `Tool` construido a mano cuyo `input_schema` sea `{}` ahora falla en `tools/list` (la especificación exige `"type": "object"`). Los servidores construidos sobre `@mcp.tool()` nunca ven esto; el SDK escribe sus esquemas.
 * **Tu cliente valida lo que recibe.** `list_tools()` y `call_tool()` comprueban la respuesta del servidor contra la versión del protocolo negociada, así que un servidor no del todo válido que el análisis permisivo de la v1 toleraba ahora lanza `pydantic.ValidationError`. Si te conectas a servidores que no controlas, cuenta con ser tú quien los descubra; la **[Guía de migración](migration.md#client-validates-inbound-traffic-against-the-protocol-schema)** tiene los detalles.
 * **Las plantillas de URI son ahora RFC 6570 de verdad.** `{+path}`, `{?query}` y compañía funcionan, la coincidencia es exacta en lugar de laxa por regex, y el path traversal en los valores extraídos se rechaza por defecto. Las plantillas más estrictas fallan al decorar, no en la primera solicitud. **[Plantillas de URI](servers/uri-templates.md)**.
@@ -172,11 +172,15 @@ Toda solicitud iniciada por el servidor desaparece en 2026-07-28: elicitación p
 
 El reemplazo le da la vuelta a la llamada. Una herramienta que necesita algo del usuario *devuelve* la pregunta (`InputRequiredResult`), el cliente la responde con los mismos callbacks que siempre tuvo, y la llamada se reintenta con las respuestas adjuntas. `Client` dirige ese bucle por ti. En el servidor rara vez construyes tú el resultado, porque lo hace una **[dependencia](handlers/dependencies.md)**: anota un parámetro con `Resolve(ask_quantity)`, donde `ask_quantity` es una función ordinaria que escribes tú, y el SDK pregunta por el mecanismo que la conexión admita, una solicitud de elicitación en vivo en una sesión heredada o una solicitud de varias idas y vueltas en 2026. Un solo cuerpo de herramienta, ambas generaciones:
 
-```python title="dual_era.py" hl_lines="24 37-38"
+```python title="server.py" hl_lines="21"
 --8<-- "docs_src/legacy_clients/tutorial001.py"
 ```
 
-Ese archivo es la propuesta en un solo lugar: un servidor, una herramienta respaldada por `Resolve`, y un cliente heredado más un cliente moderno recibiendo ambos su respuesta, en memoria. **[Solicitudes de varias idas y vueltas](handlers/multi-round-trip.md)** explica el mecanismo (incluido `request_state`, que el SDK sella y verifica por ti); **[Elicitación](handlers/elicitation.md)** cubre cómo preguntar.
+```python title="client.py" hl_lines="14-15"
+--8<-- "docs_src/legacy_clients/tutorial001_client.py"
+```
+
+Esos dos archivos son toda la propuesta: un servidor, una herramienta respaldada por `Resolve`, y un cliente heredado más un cliente moderno recibiendo ambos su respuesta del mismo servidor en ejecución (**[Atender clientes heredados](run/legacy-clients.md)** los recorre). **[Solicitudes de varias idas y vueltas](handlers/multi-round-trip.md)** explica el mecanismo (incluido `request_state`, que el SDK sella y verifica por ti); **[Elicitación](handlers/elicitation.md)** cubre cómo preguntar.
 
 !!! warning "Este es el único lugar donde un servidor v1 portado cambia de comportamiento"
     Tus propias pruebas se lo encuentran primero: `Client(mcp)` negocia 2026-07-28 contra tu

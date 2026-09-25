@@ -1,6 +1,6 @@
 ---
 translation:
-  sections: [2c79b6338e09b7ac, 7edc43b3fae11314, 1086e77ce561cd7f, a3f71823df5efc31, 9fc7109f72201cae, 7bf25983df655b66, 6330e1f4c6029683, 2f1749c8c133fa1c, b3530fcf4d11fd56, ebc33704fbd74262, cd0e9c933350390e]
+  sections: [2c79b6338e09b7ac, 9d5d10a5f0405d0a, 1086e77ce561cd7f, a3f71823df5efc31, 9fc7109f72201cae, d50fe7faead8cf68, 7bf25983df655b66, 6330e1f4c6029683, 2f1749c8c133fa1c, 8db7116fc8ddd0ee, ebc33704fbd74262, 0fde3bcea081ba3a]
   tool: 1
 ---
 # 저수준 Server {#the-low-level-server}
@@ -36,18 +36,22 @@ translation:
 
 ### 직접 해 보기 {#try-it}
 
-이번에는 Inspector를 쓸 수 없습니다. `mcp dev`와 `mcp run`은 `MCPServer`만 받습니다. 인메모리 `Client`는 상관하지 않으며, `MCPServer`를 받는 것과 똑같이 저수준 `Server`도 받습니다.
+`mcp dev`와 `mcp run`은 `MCPServer`만 받으므로 이 서버는 직접 띄워야 합니다. `server.py`의 마지막 줄이 이 서버로 평범한 ASGI 앱을 만들고, uvicorn이 그 앱을 실행합니다.
 
-```python title="main.py"
+```console
+uvicorn server:app --port 8000
+```
+
+Inspector든 다른 어떤 클라이언트든 `http://localhost:8000/mcp`로 향하게 하세요.
+
+```python title="client.py"
 import asyncio
 
 from mcp import Client
 
-from server import server
-
 
 async def main() -> None:
-    async with Client(server) as client:
+    async with Client("http://localhost:8000/mcp") as client:
         result = await client.call_tool("search_books", {"query": "dune", "limit": 5})
         print(result.content)
 
@@ -63,6 +67,8 @@ asyncio.run(main())
 
 * `result.structured_content`가 `None`입니다. 고수준 서버는 `-> str` 반환값을 `{"result": ...}`로 감싸 주지만, 여기서는 직접 만들지 않은 것을 대신 만들어 주는 곳이 없습니다.
 * `list_tools`는 **직접** 입력한 스키마를 글자 하나까지 그대로 반환합니다. 고수준 버전에는 모든 속성에 `"title": "Query"`가, 루트에 `"title": "search_booksArguments"`가 있었습니다. Pydantic이 남긴 흔적입니다. 여기서는 와이어에 실린 것이라면 전부 직접 넣은 것입니다.
+
+테스트에서는 uvicorn과 포트를 건너뜁니다. `Client(server)`는 `MCPServer`를 받는 것과 똑같이 저수준 `Server`도 프로세스 안에서 받으며, **[테스트](../get-started/testing.md)**가 바로 그 패턴입니다.
 
 ## 자동 검증 없음 {#nothing-is-checked-for-you}
 
@@ -116,6 +122,17 @@ asyncio.run(main())
 
 서버는 두 필드를 비교하지 않습니다. 이 SDK의 `Client`는 비교합니다. 선언한 `output_schema`를 만족하지 않는 `structured_content`를 반환하면 `call_tool`이 `RuntimeError`를 일으키는데, 메시지는 `Invalid structured content returned by tool search_books`로 시작해 `jsonschema` 실패 내용을 인용합니다. 스키마를 약속하기는 쉽지만, 지키는 것은 작성자의 몫입니다. 반환 타입과 스키마의 전체 단계는 **[구조화된 출력](../servers/structured-output.md)**에서 확인하세요.
 
+## JSON Schema 2020-12 다이얼렉트 {#the-dialect-is-json-schema-2020-12}
+
+`input_schema`와 `output_schema`는 JSON Schema이며, 다이얼렉트는 [MCP 사양](https://modelcontextprotocol.io/specification/latest/basic#json-schema-usage)이 정해 둡니다. `$schema` 키가 없는 스키마는 **JSON Schema 2020-12**입니다. `MCPServer`가 생성하는 스키마는 이 기본값에 기대고(Pydantic은 2020-12를 쓰고 키를 생략합니다), 손으로 작성한 dict도 같은 기준을 따르므로 2020-12 어휘 전체를 사용할 수 있습니다.
+
+```python title="server.py" hl_lines="8 14-15"
+--8<-- "docs_src/lowlevel/tutorial007.py"
+```
+
+* `input_schema`의 루트는 `"type": "object"`여야 합니다. 그 옆의 `oneOf`, `additionalProperties`, `anyOf`, `if`/`then`/`else`, `prefixItems`, 로컬 `$ref`를 쓰는 `$defs`, 그리고 나머지 2020-12 키워드는 쓴 그대로 클라이언트에 도달합니다.
+* `$schema` 키는 필요 없습니다. 더 오래된 드래프트를 선택할 때만 추가하세요. 도구의 `output_schema`에 `structured_content`를 대조해 검증하는 이 SDK의 `Client`는 `$schema`를 보고 검증기를 고르며, 키가 없으면 2020-12를 사용합니다.
+
 ## `_meta`: 모델이 아닌 애플리케이션을 위한 데이터 {#\_meta-for-the-application-not-the-model}
 
 `content`는 답변 중 모델이 읽는 부분입니다. `structured_content`는 같은 답변을 타입이 있는 데이터로 나타낸 것입니다. `_meta`는 세 번째 채널입니다. 답변의 일부가 전혀 아니면서 결과에 함께 실려 **클라이언트 애플리케이션**으로 가는 데이터입니다.
@@ -167,7 +184,7 @@ asyncio.run(main())
 --8<-- "docs_src/lowlevel/tutorial006.py"
 ```
 
-* 첫 번째 인수는 메서드 문자열입니다. 알림에는 짝이 되는 `add_notification_handler`가 있습니다.
+* 첫 번째 인수는 메서드 문자열입니다. 알림에는 짝이 되는 `add_notification_handler`가 있습니다. 이 핸들러는 stdio와 핸드셰이크 세대의 HTTP 연결에서 실행됩니다. `2026-07-28` Streamable HTTP 경로에서는 클라이언트가 보낸 알림 POST가 `202`로 수신 확인만 되고 디스패치되지 않는데, 해당 리비전이 HTTP를 통한 클라이언트에서 서버로의 알림을 정의하지 않기 때문입니다.
 * `params_type`은 핸들러가 실행되기 **전에** 들어오는 `params`를 검증하는 기준 모델입니다. 따라서 커스텀 메서드는 도구가 받지 못하는 검증을 **받습니다**. `_meta` 필드가 다른 모든 메서드처럼 파싱되도록 `RequestParams`를 상속하세요.
 * 핸들러는 `BaseModel`, `dict`, `None` 중 하나를 반환합니다. SDK가 이를 JSON-RPC 결과로 직렬화합니다.
 
@@ -204,4 +221,4 @@ use Server.middleware to observe or wrap initialization
 * `add_request_handler(method, params_type, handler)`는 어떤 메서드든 제공합니다. `initialize`는 예약되어 있습니다.
 * `Server`가 알리는 기능은 등록한 핸들러에서 도출됩니다.
 
-`Client(server)`가 두 서버를 똑같이 다룬 것은 둘이 **같은** 프로토콜이기 때문이며, 바로 그 점이 핵심입니다. 그다음 아래 계층은 클래스가 아닙니다. 바로 **[미들웨어](middleware.md)**입니다.
+클라이언트가 두 서버를 똑같이 다룬 것은 둘이 **같은** 프로토콜이기 때문이며, 바로 그 점이 핵심입니다. 그다음 아래 계층은 클래스가 아닙니다. 바로 **[미들웨어](middleware.md)**입니다.

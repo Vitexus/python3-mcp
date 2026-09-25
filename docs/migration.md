@@ -17,7 +17,7 @@ Every section heading below names the API it affects, so searching this page for
 
 | Change | First symptom | Section |
 |---|---|---|
-| `FastMCP` renamed to `MCPServer` | `ModuleNotFoundError: No module named 'mcp.server.fastmcp'` | [`FastMCP` renamed](#fastmcp-renamed-to-mcpserver) |
+| `FastMCP` renamed to `MCPServer` | `ModuleNotFoundError: No module named 'mcp.server.fastmcp'` (newer 2.x releases follow it with a pointer to this guide) | [`FastMCP` renamed](#fastmcp-renamed-to-mcpserver) |
 | Fields renamed from camelCase to snake_case | `AttributeError: 'Tool' object has no attribute 'inputSchema'` | [snake_case fields](#field-names-changed-from-camelcase-to-snake_case) |
 | `mcp.types` names removed | `ImportError: cannot import name 'Content' from 'mcp.types'` | [Removed types](#removed-type-aliases-and-classes) |
 | `McpError` renamed to `MCPError` | `ImportError: cannot import name 'McpError' from 'mcp'` | [`McpError` renamed](#mcperror-renamed-to-mcperror) |
@@ -119,7 +119,7 @@ them:
 ```python
 import httpx
 
-http_client = httpx.AsyncClient(follow_redirects=True)
+http_client = httpx.AsyncClient(timeout=httpx.Timeout(30, read=300))
 ```
 
 **After (v2):**
@@ -127,7 +127,7 @@ http_client = httpx.AsyncClient(follow_redirects=True)
 ```python
 import httpx2
 
-http_client = httpx2.AsyncClient(follow_redirects=True)
+http_client = httpx2.AsyncClient(timeout=httpx2.Timeout(30, read=300))
 ```
 
 `httpx2` is API-compatible with `httpx`, so usually only the import name
@@ -672,6 +672,8 @@ All submodules under `mcp.server.fastmcp.*` are now under `mcp.server.mcpserver.
 - `ToolError`, `ResourceError` — from `mcp.server.mcpserver.exceptions`
 - `MCPServerError` (renamed from `FastMCPError`) — from `mcp.server.mcpserver.exceptions`
 
+Importing `mcp.server.fastmcp`, or anything below it, raises `ModuleNotFoundError` (newer 2.x releases include a link to this section in its message), so existing `except ImportError` or `except ModuleNotFoundError` fallbacks around the v1 import keep working.
+
 ### What is unchanged on `MCPServer`
 
 Beyond the changes covered in this section, the everyday `FastMCP` surface carries over to `MCPServer` as-is:
@@ -992,8 +994,8 @@ its behavior is unchanged.
 `MCPError` carries `ErrorData` and is the SDK's protocol-error type — raise it
 when the request itself should be rejected (missing client capability,
 elicitation required, invalid parameters). For tool *execution* failures the
-calling LLM should see and react to, raise any other exception or return
-`CallToolResult(is_error=True, ...)` directly; that path is unchanged.
+calling LLM should see and react to, raise `ToolError` or return
+`CallToolResult(is_error=True, ...)` directly.
 
 The client sees this change too. `Client.call_tool()` and
 `ClientSession.call_tool()` raise on a JSON-RPC error response, so a tool that
@@ -1016,7 +1018,7 @@ except MCPError as e:
 
 ### Resource not found returns `-32602` and resource lookups raise typed exceptions (SEP-2164)
 
-Reading a missing resource now returns JSON-RPC error code `-32602` (invalid params) with the requested URI in `error.data` (`{"uri": ...}`), per [SEP-2164](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2164). Previously the server returned code `0` with no `data`. Clients can now reliably distinguish not-found from other errors; a template handler that raises `ResourceNotFoundError` (from `mcp.server.mcpserver.exceptions`) produces this same response.
+Reading a missing resource now returns JSON-RPC error code `-32602` (invalid params) with the requested URI in `error.data` (`{"uri": ...}`), per [SEP-2164](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2164). Previously the server returned code `0` with no `data`. Clients can now reliably distinguish not-found from other errors; a resource handler (static or template) that raises `ResourceNotFoundError` (from `mcp.server.mcpserver.exceptions`) produces this same response.
 
 The underlying lookups now raise typed exceptions instead of `ValueError`. `ResourceManager.get_resource()` raises `ResourceNotFoundError` when no resource or template matches the URI, and `ResourceTemplate.create_resource()` raises `ResourceError` when the template function fails. Neither subclasses `ValueError`, so callers catching `ValueError` should switch to `ResourceNotFoundError` / `ResourceError` (both importable from `mcp.server.mcpserver.exceptions`; `ResourceNotFoundError` subclasses `ResourceError`).
 
@@ -2090,7 +2092,6 @@ http_client = httpx2.AsyncClient(
     headers={"Authorization": "Bearer token"},
     timeout=httpx2.Timeout(30, read=300),
     auth=my_auth,
-    follow_redirects=True,
 )
 
 async with http_client:
@@ -2101,11 +2102,11 @@ async with http_client:
         ...
 ```
 
-v1's internal client set `follow_redirects=True`; set it explicitly when supplying your own `httpx2.AsyncClient` to preserve that behavior.
+v1's internal client set `follow_redirects=True`. You don't need it on your own client: the transport follows a method-preserving redirect within the endpoint's origin (a trailing-slash 307/308, say) itself, and does not follow one anywhere else, whatever the client is configured to do.
 
 `streamable_http_client` itself keeps a small signature — `streamable_http_client(url, *, http_client=None, terminate_on_close=True)` — and now yields a 2-tuple (next section). The removed function's other parameters map onto the client you build:
 
-- `headers`, `timeout`, `sse_read_timeout`, `auth`: set them on the `httpx2.AsyncClient` as above. `streamablehttp_client` defaulted to `httpx.Timeout(30, read=300)`; a bare `httpx2.AsyncClient()` falls back to httpx2's flat 5-second timeout, too short for the long-lived GET stream, so set `timeout=httpx2.Timeout(30, read=300)` (as shown) to keep v1's values. Omitting `http_client` still gives you a default client with those timeouts and `follow_redirects=True`.
+- `headers`, `timeout`, `sse_read_timeout`, `auth`: set them on the `httpx2.AsyncClient` as above. `streamablehttp_client` defaulted to `httpx.Timeout(30, read=300)`; a bare `httpx2.AsyncClient()` falls back to httpx2's flat 5-second timeout, too short for the long-lived GET stream, so set `timeout=httpx2.Timeout(30, read=300)` (as shown) to keep v1's values. Omitting `http_client` still gives you a default client with those timeouts.
 - `httpx_client_factory`: gone with no replacement — call your factory yourself and pass the result as `http_client`.
 - `terminate_on_close`: unchanged (default `True`).
 
@@ -2149,10 +2150,7 @@ async def capture_session_id(response: httpx2.Response) -> None:
     if session_id:
         captured_session_ids.append(session_id)
 
-http_client = httpx2.AsyncClient(
-    event_hooks={"response": [capture_session_id]},
-    follow_redirects=True,
-)
+http_client = httpx2.AsyncClient(event_hooks={"response": [capture_session_id]})
 
 async with http_client:
     async with streamable_http_client(url, http_client=http_client) as (read_stream, write_stream):
@@ -2497,7 +2495,9 @@ metadata's `issuer` exactly matches the authorization server URL advertised in t
 resource metadata, as required by [RFC 8414](https://datatracker.ietf.org/doc/html/rfc8414)
 section 3.3 ([SEP-2468](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2468)).
 The comparison is a simple string comparison ([RFC 3986](https://datatracker.ietf.org/doc/html/rfc3986)
-section 6.2.1), so even a trailing-slash disagreement counts as a mismatch. v1 accepted the
+section 6.2.1), so even a trailing-slash disagreement counts as a mismatch. (For an older server
+that publishes no protected resource metadata the expected value is the MCP server's own origin,
+and there a root issuer with a trailing slash is accepted too.) v1 accepted the
 metadata without checking, so a server pairing whose two values disagree authenticated fine
 under v1 and now fails the entire flow. For example, when the MCP server's protected resource
 metadata advertises
@@ -2515,7 +2515,7 @@ OAuthFlowError: Authorization server metadata issuer mismatch: https://as.exampl
 
 There is no client-side override. Fix the deployment instead: make the authorization server's
 `issuer` string-equal the URL in the protected resource metadata's `authorization_servers`
-list. See [OAuth metadata URLs no longer gain a trailing slash](#oauth-metadata-urls-no-longer-gain-a-trailing-slash)
+list (or the MCP server's origin, without protected resource metadata). See [OAuth metadata URLs no longer gain a trailing slash](#oauth-metadata-urls-no-longer-gain-a-trailing-slash)
 for how v2 preserves the exact string form of these URLs.
 
 ### OAuth client requests `offline_access` and adds `prompt=consent` when the authorization server supports it ([SEP-2207](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2207))
@@ -2737,7 +2737,7 @@ One behavioral caveat when moving progress-reporting handlers onto `Client(serve
 
 Every deprecation below is a runtime warning as well as a type-checker one: deprecated methods and helpers emit `mcp.MCPDeprecationWarning` on each call, and the deprecated `Server(...)` constructor parameters (`on_set_logging_level`, `on_roots_list_changed`, `on_progress`) emit it at construction time. The category subclasses `UserWarning`, not `DeprecationWarning`, so it is visible by default; [Deprecated features](deprecated.md) has the full list and each replacement.
 
-Under pytest's `filterwarnings = ["error"]`, that warning becomes an exception at the first deprecated call. Inside an `@mcp.tool()` handler the exception is caught like any other and returned as `CallToolResult(is_error=True)` (`Error executing tool ...: The logging capability is deprecated as of 2026-07-28 (SEP-2577).`), which reads as a failing tool rather than a warning. Keep the warnings visible but non-fatal with:
+Under pytest's `filterwarnings = ["error"]`, that warning becomes an exception at the first deprecated call. Inside an `@mcp.tool()` handler the exception is caught like any other and returned as `CallToolResult(is_error=True)` (`Error executing tool ...`, with the `MCPDeprecationWarning` traceback in the server log), which reads as a failing tool rather than a warning. Keep the warnings visible but non-fatal with:
 
 ```toml
 [tool.pytest.ini_options]

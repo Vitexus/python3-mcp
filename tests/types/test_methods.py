@@ -454,11 +454,20 @@ def test_elicit_result_surface_accepts_null_content_values_at_every_version_that
         surface.model_validate({"action": "accept", "content": {"name": "x", "age": None}})
 
 
-def test_server_capabilities_extensions_with_null_json_value_round_trips_at_2026():
-    """Spec `JSONValue` includes `null`; the ts->json render dropped it from the vendored schema."""
-    raw: dict[str, Any] = {"extensions": {"x": {"k": None}}}
-    parsed = v2026.ServerCapabilities.model_validate(raw)
-    assert parsed.model_dump(mode="json")["extensions"] == {"x": {"k": None}}
+def test_discovery_capabilities_preserve_nested_json_values() -> None:
+    """Spec `JSONValue` permits nested containers and every JSON scalar, including numbers and null."""
+    extensions = {"x": {"nested": [None, True, 1, 1.5, "text", {"child": [False]}]}}
+    raw = {
+        "supportedVersions": ["2026-07-28"],
+        "capabilities": {"extensions": extensions},
+        "resultType": "complete",
+        "ttlMs": 0,
+        "cacheScope": "private",
+    }
+    parsed = methods.parse_server_result("server/discover", "2026-07-28", raw)
+    assert isinstance(parsed, types.DiscoverResult)
+    assert parsed.capabilities.extensions == extensions
+    assert methods.serialize_server_result("server/discover", "2026-07-28", raw) == raw
 
 
 def test_elicit_request_surface_accepts_loose_property_schemas():
@@ -472,6 +481,22 @@ def test_elicit_request_surface_accepts_loose_property_schemas():
     }
     parsed = methods.parse_server_request("elicitation/create", "2025-11-25", params)
     assert isinstance(parsed, types.ElicitRequest)
+
+
+def test_2025_11_25_tool_schema_surfaces_accept_boolean_sub_schemas():
+    """JSON Schema 2020-12 allows `true`/`false` wherever a sub-schema is expected; real servers emit them."""
+    tool = {
+        "name": "echo",
+        "inputSchema": {"type": "object", "properties": {"arg": True}},
+        "outputSchema": {
+            "type": "object",
+            "properties": {"result": True, "hidden": False, "rows": {"type": "array", "items": True}},
+            "required": ["result"],
+        },
+    }
+    sieved = methods.serialize_server_result("tools/list", "2025-11-25", {"tools": [tool]})
+    assert sieved["tools"][0]["inputSchema"] == tool["inputSchema"]
+    assert sieved["tools"][0]["outputSchema"] == tool["outputSchema"]
 
 
 def test_response_map_keys_mirror_the_request_map_keys():
