@@ -1016,8 +1016,9 @@ REQUIREMENTS: dict[str, Requirement] = {
     "mcpserver:tool:handler-throws": Requirement(
         source="sdk",
         behavior=(
-            "An exception raised by a tool function (ToolError or otherwise) is caught and returned as a "
-            "tool result with isError true and the failure text in content; it does not become a JSON-RPC error."
+            "An exception raised by a tool function is caught and returned as a tool result with isError true, "
+            "never a JSON-RPC error; a ToolError carries its message in content, any other exception carries only "
+            "the generic 'Error executing tool <name>'."
         ),
     ),
     "mcpserver:tool:input-validation": Requirement(
@@ -1307,8 +1308,15 @@ REQUIREMENTS: dict[str, Requirement] = {
     "mcpserver:resource:read-throws-surfaced": Requirement(
         source="sdk",
         behavior=(
-            "A resource function that raises is surfaced to the caller as a JSON-RPC error response "
-            "(-32603 Internal error), with the original exception text withheld."
+            "A resource function that raises an unexpected exception is surfaced to the caller as a JSON-RPC "
+            "error response (-32603 Internal error), with the original exception text withheld."
+        ),
+    ),
+    "mcpserver:resource:static-not-found": Requirement(
+        source="sdk",
+        behavior=(
+            "A static (fixed-URI) resource function that raises ResourceNotFoundError is surfaced as -32602 "
+            "with the handler's message and the URI in data, the same as from a template function."
         ),
     ),
     "mcpserver:resource:static": Requirement(
@@ -2840,11 +2848,11 @@ REQUIREMENTS: dict[str, Requirement] = {
         source=f"{SPEC_BASE_URL}/basic/authorization#access-token-usage",
         behavior="The resource server validates that the token audience matches its resource identifier.",
         transports=("streamable-http",),
-        note="Auth is enforced at the HTTP layer.",
+        note="Auth is enforced at the HTTP layer; the conformant tests enable AuthSettings.validate_token_resource.",
         divergence=Divergence(
             note=(
-                "BearerAuthBackend never inspects AccessToken.resource; a token issued for a different "
-                "resource is accepted. Spec MUST."
+                "Off by default: without AuthSettings.validate_token_resource the bearer gate does not compare "
+                "AccessToken.resource with resource_server_url and the check is the token verifier's. Spec MUST."
             ),
         ),
     ),
