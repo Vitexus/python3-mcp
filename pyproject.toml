@@ -317,4 +317,5 @@ source = [
 
 [tool.inline-snapshot]
 default-flags = ["disable"]
+default-flags-tui = ["disable"]
 format-command = "ruff format --stdin-filename {filename}"
