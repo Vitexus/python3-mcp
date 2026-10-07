@@ -70,8 +70,9 @@ def main() -> None:
         text = text.replace('dynamic = ["version"]', f'version = "{version}"')
 
     text = strip_dynamic_versioning(text)
-    # Older hatchling (e.g. Ubuntu noble) rejects classifiers it does not know.
-    text = text.replace('    "Programming Language :: Python :: 3.14",\n', '')
+    # Older hatchling (Debian bookworm, Ubuntu noble) rejects classifiers it
+    # does not know, such as Python 3.13/3.14.
+    text = re.sub(r'    "Programming Language :: Python :: 3\.\d+",\n', '', text)
 
     with open(path, "w") as f:
         f.write(text)
