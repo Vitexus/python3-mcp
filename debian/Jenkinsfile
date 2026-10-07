@@ -47,6 +47,9 @@ distributions.each { distro ->
         node {
             ansiColor('xterm') {
                 stage('Checkout ' + distroName) {
+                    // The first branch shares the SCM Checkout workspace; its
+                    // read-only .git packs cannot be overwritten by unstash.
+                    deleteDir()
                     unstash 'src'
                     def imageName = vendor + '/' + distro
                     buildImage = docker.image(imageName)
