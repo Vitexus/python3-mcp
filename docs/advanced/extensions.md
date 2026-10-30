@@ -25,10 +25,10 @@ Done. The server now advertises `io.modelcontextprotocol/ui` under
     Extensions are fixed at construction. There is no `add_extension` to call later:
     a server's capability map should not change while clients are connected to it.
 
-The capability map rides `server/discover`, which is a **2026-07-28** path. A legacy
-`initialize` handshake has nowhere to put it, so a legacy client simply doesn't see
-the extension. Design for that: an extension *augments* a server, it must not be the
-only way the server is usable.
+The capability map rides `server/discover` on **2026-07-28** connections and the
+`initialize` result on legacy ones. A client that doesn't know an extension ignores
+it. Design for that: an extension *augments* a server, it must not be the only way
+the server is usable.
 
 ## Writing your own
 
@@ -189,6 +189,31 @@ Drop the extension and none of this exists: the server's gate refuses a client
 that did not declare it (error -32021), and a claimed shape from a server that
 skips the gate fails validation, exactly as the spec requires for an
 unrecognized `resultType`. Off by default, on both ends of the wire.
+
+An extension can also expose methods of its own. Pass its type to `client.extension()`
+after connecting to get the API bound to that connection. Run the
+[Skills server](skills.md#serving-a-skill) at `http://localhost:8000/mcp` for this example:
+
+```python
+import anyio
+
+from mcp import Client
+from mcp.client.extensions.skills import Skills
+
+
+async def main() -> None:
+    async with Client("http://localhost:8000/mcp", extensions=[Skills()]) as client:
+        for skill in await client.extension(Skills).list_skills():
+            print(skill.uri)
+
+
+if __name__ == "__main__":
+    anyio.run(main)
+```
+
+`client.extension(Skills)` returns the type produced by `Skills.bind(session)`. Your own
+extension can define the same hook. The client raises `ValueError` when the type was not
+registered and `RuntimeError` when it is not connected.
 
 To advertise an identifier with **no** client-side behaviour (the server gates on
 the capability, the client does nothing, as in the search client above), use

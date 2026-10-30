@@ -934,6 +934,23 @@ def test_serialize_server_result_drops_2026_only_keys_at_pre_2026_versions(metho
     assert "cacheScope" not in sieved
 
 
+@pytest.mark.parametrize("version", PRE_2026)
+def test_initialize_round_trips_capability_extensions_at_pre_2026_versions(version: str):
+    extensions = {"io.modelcontextprotocol/ui": {"mimeTypes": ["text/html;profile=mcp-app"]}}
+    capabilities = {"tools": {}, "extensions": extensions}
+    result = {"protocolVersion": version, "capabilities": capabilities, "serverInfo": {"name": "S", "version": "1"}}
+    sieved = methods.serialize_server_result("initialize", version, result)
+    assert sieved["capabilities"] == capabilities
+    parsed = methods.parse_server_result("initialize", version, sieved)
+    assert isinstance(parsed, types.InitializeResult)
+    assert parsed.capabilities.extensions == extensions
+    client_info = {"name": "C", "version": "1"}
+    params = {"protocolVersion": version, "capabilities": {"extensions": extensions}, "clientInfo": client_info}
+    request = methods.parse_client_request("initialize", version, params)
+    assert isinstance(request, types.InitializeRequest)
+    assert request.params.capabilities.extensions == extensions
+
+
 def test_serialize_server_result_keeps_2026_only_keys_at_2026_07_28():
     dumped = MONOLITH_RESULT_FIXTURES["tools/list"].model_dump(by_alias=True, mode="json", exclude_none=True)
     sieved = methods.serialize_server_result("tools/list", "2026-07-28", dumped)
@@ -958,6 +975,19 @@ def test_serialize_server_result_preserves_open_type_extras():
     sieved = methods.serialize_server_result("tools/list", "2025-11-25", {"tools": [tool]})
     assert sieved["tools"][0]["inputSchema"] == input_schema
     assert sieved["tools"][0]["_meta"] == nested_meta
+
+
+@pytest.mark.parametrize("input_schema", [{}, {"type": "array"}])
+def test_serialize_server_result_rejects_invalid_tool_input_schema(input_schema: dict[str, Any]) -> None:
+    """The 2026 spec requires a tool's input schema to declare `type="object"`, even though it allows extra keys."""
+    result = {
+        "tools": [{"name": "echo", "inputSchema": input_schema}],
+        "resultType": "complete",
+        "ttlMs": 0,
+        "cacheScope": "private",
+    }
+    with pytest.raises(pydantic.ValidationError):
+        methods.serialize_server_result("tools/list", "2026-07-28", result)
 
 
 def test_serialize_server_result_drops_top_level_server_info_on_discover_but_keeps_the_meta_stamp():
