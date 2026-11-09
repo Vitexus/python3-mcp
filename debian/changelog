@@ -1,3 +1,13 @@
+python-mcp (1:2.3.0-1) unstable; urgency=medium
+
+  * Update Debian version to actual upstream base v2.3.0 + main @
+    77001c96  Code already contained v2.3.0 (all python-sdk GHSA
+    advisories patched in <= 2.2.0 are covered); this aligns the Debian
+    version with the upstream base and merges post-2.3.0 main. Upstream
+    base recorded: v2.3.0 + main @ 77001c96, 2026-11-09.
+
+ -- vitex <info@vitexsoftware.cz>  Mon, 09 Nov 2026 10:49:05 +0100
+
 python-mcp (1:2.0.0-1) unstable; urgency=medium
 
   * Update to upstream v2.0.0 (stable v2 release).
